@@ -1,10 +1,10 @@
-# FilesLink
+# 📂 FilesLink
 
 > **Secure file sharing powered by Telegram cloud storage**
 
-FilesLink is a Telegram bot that transforms your private channel into unlimited cloud storage. Upload files, get instant download links—no local disk required.
+FilesLink is a Telegram bot that transforms your private channel into unlimited cloud storage. Upload files, get instant download links, no local disk required.
 
-[![Docker](https://img.shields.io/badge/docker-supported-blue)](https://hub.docker.com/r/bytetrix/fileslink)
+[![Docker](https://img.shields.io/badge/docker-supported-blue)](https://hub.docker.com/r/kvnxo/fileslink)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![Rust](https://img.shields.io/badge/rust-1.90+-orange)](https://www.rust-lang.org)
 
@@ -45,9 +45,9 @@ docker compose up -d
 ## Requirements
 
 **Required:**
-- Telegram bot token ([get from BotFather](https://t.me/botfather))
+- Telegram bot token (get from [BotFather](https://t.me/botfather))
 - Private Telegram channel
-- Channel ID ([get via @userinfobot](https://t.me/userinfobot))
+- Channel ID (get via [@userinfobot](https://t.me/userinfobot))
 
 **Optional:**
 - Docker (recommended)
@@ -63,7 +63,7 @@ APP_FILE_DOMAIN=https://yourdomain.com/files
 
 See [Configuration Guide](docs/CONFIGURATION.md) for all options.
 
-## Deployment
+## Cloud Deployment
 
 Deploy to free hosting in minutes:
 

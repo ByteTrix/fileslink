@@ -7,7 +7,7 @@ Complete guide to all FilesLink environment variables.
 ```bash
 # Required
 BOT_TOKEN=              # Telegram bot token
-STORAGE_CHANNEL_ID=     # Channel ID for storage
+STORAGE_CHANNEL_ID=-    # Channel ID for storage
 
 # Server
 SERVER_PORT=8080
