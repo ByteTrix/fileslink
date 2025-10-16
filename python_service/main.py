@@ -16,6 +16,7 @@ from telethon import TelegramClient, utils
 from telethon.tl import types
 from telethon.tl.types import PeerChannel
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
+from urllib.parse import quote
 import uvicorn
 
 from FastTelethon import download_file, upload_file
@@ -542,6 +543,18 @@ async def download_large_file(channel_id: str, message_id: int):
         
         logger.info(f"Download complete: {file_name}")
         
+        # Build safe Content-Disposition header (ASCII fallback + UTF-8 filename)
+        ascii_fallback = ''.join(
+            c if 32 <= ord(c) < 127 and c not in {'\\', '"'} else '_'
+            for c in file_name
+        ).strip('_')
+        if not ascii_fallback:
+            ascii_fallback = f"file_{message_id}"
+
+        content_disposition = f'attachment; filename="{ascii_fallback}"'
+        if ascii_fallback != file_name:
+            content_disposition += f"; filename*=UTF-8''{quote(file_name)}"
+
         # Stream the file back
         def file_iterator():
             with open(temp_path, "rb") as f:
@@ -555,7 +568,7 @@ async def download_large_file(channel_id: str, message_id: int):
             file_iterator(),
             media_type=mime_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{file_name}"',
+                "Content-Disposition": content_disposition,
                 "Content-Length": str(file_size)
             }
         )
