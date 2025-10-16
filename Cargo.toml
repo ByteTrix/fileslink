@@ -1,0 +1,31 @@
+[package]
+name = "fileslink"
+version = "0.2.0"
+edition = "2021"
+
+[workspace]
+members = [
+    "cli",
+]
+
+[[bin]]
+name = "fileslink-cli"
+path = "cli/src/main.rs"
+
+[dependencies]
+log = "0.4"
+pretty_env_logger = "0.5.0"
+tokio = { version = "1.38.0", features = ["full"] }
+http = "1.1.0"
+axum = "0.7.5"
+mime_guess = "2.0.4"
+structopt = "0.3.26"
+teloxide = { version = "0.12", features = ["full"] }
+cli = { path = "cli" }
+shared = { path = "shared" }
+bot = { path = "bot" }
+
+[dev-dependencies]
+assert_cmd = "2.0.8"
+serial_test = "3.1.1"
+nanoid = "0.4.0"

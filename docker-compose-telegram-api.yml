@@ -1,0 +1,22 @@
+version: '3.7'
+
+services:
+  telegram-bot-api:
+    container_name: fileslink-tg-api
+    image: aiogram/telegram-bot-api:latest
+    restart: unless-stopped
+    volumes:
+      - ./telegram-bot-api-data:/var/lib/telegram-bot-api
+    env_file:
+      - .env
+  nginx:
+    container_name: fileslink-nginx
+    image: nginx:1.19-alpine
+    restart: unless-stopped
+    depends_on:
+      - telegram-bot-api
+    volumes:
+      - ./telegram-bot-api-data:/var/lib/telegram-bot-api
+      - ./nginx:/etc/nginx/conf.d/
+    ports:
+      - "8088:80"
