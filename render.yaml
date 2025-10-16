@@ -43,6 +43,6 @@ services:
       - key: TELEGRAM_PHONE
         sync: false  # Set manually - sensitive
       - key: STORAGE_CHANNEL_ID
-        sync: false  # Same as STORAGE_CHANNEL_ID
+        sync: false  # Your storage channel ID (e.g., -1001234890)
       - key: TELETHON_SESSION_BASE64
         sync: false  # Get this from /session/backup after first authorization

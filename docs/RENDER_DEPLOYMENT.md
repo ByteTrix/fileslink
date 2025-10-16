@@ -72,7 +72,7 @@ base64 -w 0 fasttelethon_session.session
    - `TELEGRAM_API_ID` = From my.telegram.org
    - `TELEGRAM_API_HASH` = From my.telegram.org
    - `TELEGRAM_PHONE` = Your phone with country code (e.g., `+1234567890`)
-   - `TELEGRAM_CHANNEL_ID` = Same as `STORAGE_CHANNEL_ID`
+   - `STORAGE_CHANNEL_ID` = Same as above (e.g., `-10012345670`)
    - `TELETHON_SESSION_BASE64` = *(Leave empty for now if using Option A)*
 
 ---
