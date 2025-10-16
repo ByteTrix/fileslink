@@ -32,7 +32,6 @@ docker compose up -d
 
 | Guide | Description |
 |-------|-------------|
-| [🚀 Quick Start](docs/QUICKSTART.md) | Get running in 5 minutes |
 | [📦 Installation](docs/INSTALLATION.md) | Docker, local, and production setup |
 | [⚙️ Configuration](docs/CONFIGURATION.md) | All environment variables explained |
 | [📱 Telegram Setup](docs/TELEGRAM_STORAGE_SETUP.md) | Configure your storage channel |
@@ -68,8 +67,8 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options.
 
 Deploy to free hosting in minutes:
 
-- **Railway** - Recommended, easiest setup
 - **Render** - 100% free with [Cloudflare keep-alive](https://github.com/ByteTrix/cloudflare-render-ping) (no sleep!)
+- **Railway** - easiest setup
 - **Fly.io** - Global edge deployment
 - **VPS** - Full control
 
