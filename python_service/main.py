@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, HTMLResponse
 from telethon import TelegramClient, utils
 from telethon.tl import types
+from telethon.tl.types import PeerChannel
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 import uvicorn
 
@@ -426,6 +427,8 @@ async def upload_large_file(
     if not target_channel:
         raise HTTPException(status_code=400, detail="Channel ID required")
     
+    temp_path = None  # Initialize to avoid UnboundLocalError
+    
     try:
         # Save uploaded file temporarily
         temp_path = f"/tmp/{file.filename}"
@@ -481,7 +484,7 @@ async def upload_large_file(
         
     except Exception as e:
         logger.error(f"Upload failed: {e}", exc_info=True)
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
@@ -498,11 +501,18 @@ async def download_large_file(channel_id: str, message_id: int):
     if not client or not await client.is_user_authorized():
         raise HTTPException(status_code=503, detail="Telegram client not ready")
     
+    temp_path = None  # Initialize to avoid UnboundLocalError
+    
     try:
         logger.info(f"Fetching message {message_id} from channel {channel_id}...")
         
+        # Convert channel_id string to integer and create PeerChannel
+        # This helps Telethon resolve the entity correctly
+        channel_id_int = int(channel_id)
+        peer = PeerChannel(utils.resolve_id(channel_id_int)[0])
+        
         # Get the message
-        message = await client.get_messages(channel_id, ids=message_id)
+        message = await client.get_messages(peer, ids=message_id)
         
         if not message or not message.document:
             raise HTTPException(status_code=404, detail="File not found")
@@ -554,7 +564,7 @@ async def download_large_file(channel_id: str, message_id: int):
         raise
     except Exception as e:
         logger.error(f"Download failed: {e}", exc_info=True)
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
@@ -566,7 +576,11 @@ async def get_file_info(channel_id: str, message_id: int):
         raise HTTPException(status_code=503, detail="Telegram client not ready")
     
     try:
-        message = await client.get_messages(channel_id, ids=message_id)
+        # Convert channel_id string to integer and create PeerChannel
+        channel_id_int = int(channel_id)
+        peer = PeerChannel(utils.resolve_id(channel_id_int)[0])
+        
+        message = await client.get_messages(peer, ids=message_id)
         
         if not message or not message.document:
             raise HTTPException(status_code=404, detail="File not found")
