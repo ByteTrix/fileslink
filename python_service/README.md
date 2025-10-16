@@ -1,14 +1,14 @@
 # FastTelethon Service
 
-High-speed Telegram file upload/download service using MTProto Client API.
+High-speed Telegram file upload/download service bypassing Bot API's 20MB limit using MTProto Client.
 
-## Features
+## Why FastTelethon?
 
-- ✅ **No file size limits** (up to 2GB per file)
-- ✅ **Fast parallel upload/download** (10-20x faster than bot API)
-- ✅ **Streaming downloads** (memory efficient)
-- ✅ **Progress tracking**
-- ✅ **REST API** for easy integration
+Telegram Bot API has a **20MB file size limit**. FastTelethon uses MTProto client protocol to:
+- ✅ Support files up to **2GB**
+- ✅ Download **10-30x faster** than Bot API (10-30 MB/s)
+- ✅ Parallel transfers for better performance
+- ✅ Streaming downloads (memory efficient)
 
 ## Setup
 

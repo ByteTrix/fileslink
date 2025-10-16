@@ -2,18 +2,29 @@
 
 Deploy FilesLink to cloud platforms for free or low-cost hosting.
 
+**Note:** For large file support (>20MB), see [FastTelethon Setup](SETUP_FASTTELETHON.md) or [Render Deployment](RENDER_DEPLOYMENT.md) for integrated setup.
+
 ## Quick Comparison
 
 | Platform | Free Tier | Setup Time | Keep-Alive Needed | Best For |
 |----------|-----------|------------|-------------------|----------|
-| **Railway** | 500 hrs/mo | 5 min | No | Recommended ⭐ |
-| **Render** | Yes (sleeps) | 5 min | Yes | Free tier + keep-alive |
+| **Render (Blueprint)** | Yes | 5 min | Yes | Multi-service + FastTelethon ⭐ |
+| **Railway** | 500 hrs/mo | 5 min | No | Simple deployment |
+| **Render (Single)** | Yes (sleeps) | 5 min | Yes | Bot-only (no large files) |
 | **Fly.io** | 3 VMs free | 10 min | No | Global edge |
 | **VPS** | Varies | 15 min | No | Full control |
 
 ---
 
-## Render (Free with Keep-Alive) (Recommended) ⭐
+## Render with FastTelethon (Recommended) ⭐
+
+Deploy both FilesLink and FastTelethon service for full large file support (up to 2GB).
+
+**See:** [Render Deployment Guide](RENDER_DEPLOYMENT.md) for complete setup with session persistence.
+
+---
+
+## Render (Bot Only - No Large Files)
 
 Render offers a generous free tier, but instances sleep after 15 minutes of inactivity. **Use Cloudflare Workers to prevent sleep!**
 

@@ -8,11 +8,17 @@ pub fn build_url_path(unique_id: &str, file_name: &str) -> String {
 }
 
 /// Extract the unique id from a path of the form "<unique_id>_<filename>".
-/// Falls back to the full string if no underscore is present (backward compatibility).
+/// Since unique_id is always 8 characters (from nanoid!(8)), we can extract it reliably.
+/// Falls back to checking for underscore at position 8 if present.
 pub fn extract_id_from_path(path: &str) -> &str {
-    if let Some(pos) = path.find('_') {
+    // Check if there's an underscore at position 8 (after 8-char nanoid)
+    if path.len() > 8 && path.chars().nth(8) == Some('_') {
+        &path[..8]
+    } else if let Some(pos) = path.find('_') {
+        // Fallback: use first underscore (backward compatibility for old links)
         &path[..pos]
     } else {
+        // No underscore: treat entire path as ID (backward compatibility)
         path
     }
 }
@@ -37,6 +43,19 @@ mod tests {
     fn test_extract_id_from_path_with_filename() {
         let id = extract_id_from_path("ZvOWMhv1_report.pdf");
         assert_eq!(id, "ZvOWMhv1");
+    }
+
+    #[test]
+    fn test_extract_id_with_underscores_in_filename() {
+        // 8-char nanoid + underscore + filename with underscores
+        let id = extract_id_from_path("K_zO5rG8_270507.mp4");
+        assert_eq!(id, "K_zO5rG8");
+    }
+
+    #[test]
+    fn test_extract_id_from_path_with_multiple_underscores() {
+        let id = extract_id_from_path("rFgFEY12_file_name_with_many_underscores.txt");
+        assert_eq!(id, "rFgFEY12");
     }
 
     #[test]

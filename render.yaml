@@ -35,6 +35,7 @@ services:
     plan: free
     region: singapore
     branch: main
+    autoDeploy: false  # Disable auto-deploy (manual deploy only)
     envVars:
       - key: TELEGRAM_API_ID
         sync: false  # Set manually - sensitive
