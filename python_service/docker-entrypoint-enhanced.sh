@@ -49,5 +49,12 @@ fi
 chmod 600 "$SESSION_FILE" 2>/dev/null || true
 chmod -R 700 "$SESSION_DIR"
 
+# Ensure we're in the app directory
+cd /app
+
 echo "🚀 Starting FastTelethon service..."
+echo "📍 Working directory: $(pwd)"
+echo "📂 Files in /app:"
+ls -la /app
+
 exec python -m uvicorn main:app --host 0.0.0.0 --port 8001

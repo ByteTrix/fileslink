@@ -7,3 +7,4 @@
 /nginx
 .vscode/tasks.json
 python_service/sessions/fasttelethon_session.session
+python_service/__pycache__/
