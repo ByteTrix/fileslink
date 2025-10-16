@@ -1,0 +1,72 @@
+# Multi-stage Dockerfile for FilesLink (Rust + Python FastTelethon)
+
+# Stage 1: Build Rust application
+FROM rust:latest as rust-build
+
+RUN apt-get update && apt-get install -y \
+    musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy all Rust source files
+COPY Cargo.toml Cargo.lock ./
+COPY bot ./bot
+COPY cli ./cli
+COPY shared ./shared
+COPY src ./src
+
+# Build the Rust binaries
+RUN cargo build --release
+
+# Stage 2: Python FastTelethon service
+FROM python:3.12-slim as fasttelethon
+
+WORKDIR /app
+
+# Install system dependencies for Python
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python service files
+COPY python_service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY python_service/ .
+
+# Create sessions directory
+RUN mkdir -p /app/sessions
+
+# Copy and set entrypoint
+RUN chmod +x /app/docker-entrypoint.sh
+
+EXPOSE 8001
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "info"]
+
+# Stage 3: Final runtime for Rust application
+FROM ubuntu:22.04 as fileslink-app
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy Rust binaries from build stage
+COPY --from=rust-build /build/target/release/fileslink /app/fileslink
+COPY --from=rust-build /build/target/release/fileslink-cli /app/fileslink-cli
+
+RUN chmod +x /app/fileslink
+RUN chmod +x /app/fileslink-cli
+
+ENV PATH="/app:${PATH}"
+ENV FILESLINK_PIPE_PATH="/app/fileslink.pipe"
+
+EXPOSE 8080
+
+CMD ["/app/fileslink"]

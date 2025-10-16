@@ -2,10 +2,14 @@ version: '3.7'
 
 services:
   app:
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
     image: kvnxo/fileslink:latest
     container_name: fileslink-app
     depends_on:
       - nginx
+      - fasttelethon
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -14,6 +18,25 @@ services:
       - ./config:/app/config
     env_file:
       - .env
+    environment:
+      - FASTTELETHON_URL=http://fasttelethon:8001
+  
+  fasttelethon:
+    build:
+      context: ./python_service
+      dockerfile: Dockerfile
+    image: fileslink-fasttelethon:latest
+    container_name: fileslink-fasttelethon
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./python_service/sessions:/app/sessions
+    env_file:
+      - .env
+    environment:
+      - SESSION_NAME=/app/sessions/fasttelethon_session
+  
   telegram-bot-api:
     container_name: fileslink-tg-api
     image: aiogram/telegram-bot-api:latest

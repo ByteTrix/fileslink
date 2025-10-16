@@ -3,6 +3,7 @@ use log::{debug, error, info, warn};
 use nanoid::nanoid;
 use shared::config::Config;
 use shared::file_storage::{save_file_metadata, FileMetadata};
+use shared::link_utils::build_url_path;
 use std::error::Error;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -48,6 +49,42 @@ impl Display for FileQueueItem {
 }
 
 pub type FileQueueType = Arc<Mutex<Vec<FileQueueItem>>>;
+
+impl FileQueueItem {
+    /// Human-readable summary for queue display
+    pub fn summary(&self) -> String {
+        if let Some(name) = &self.file_name {
+            return format!("{}", name);
+        }
+        if let Some(url) = &self.url {
+            let short = if url.len() > 48 { format!("{}…", &url[..48]) } else { url.clone() };
+            return format!("URL: {}", short);
+        }
+        if let Some(fid) = &self.file_id {
+            return format!("file_id: {}", fid);
+        }
+        "<unknown>".to_string()
+    }
+}
+
+/// Get a snapshot of the current queue as display strings
+pub async fn get_queue_snapshot(queue: &FileQueueType, limit: usize) -> (usize, Vec<String>) {
+    let q = queue.lock().await;
+    let total = q.len();
+    let mut items = Vec::new();
+    for (i, item) in q.iter().take(limit).enumerate() {
+        items.push(format!("{}. {}", i + 1, item.summary()));
+    }
+    (total, items)
+}
+
+/// Clear the entire queue, returning number of items removed
+pub async fn clear_queue_all(queue: &FileQueueType) -> usize {
+    let mut q = queue.lock().await;
+    let n = q.len();
+    q.clear();
+    n
+}
 
 
 pub async fn process_queue(
@@ -140,27 +177,22 @@ async fn forward_file_to_storage_channel(
     let storage_channel_id = Config::instance().await.storage_channel_id()
         .map_err(|e| format!("Storage channel not configured: {}", e))?;
 
-    // Get file info from Telegram
-    let (file_path, file_size) = get_file_info(bot.clone(), file_id).await?;
-    info!("File info obtained - Path: {}, Size: {} bytes", &file_path, file_size);
-
     // Generate unique ID for this file
     let unique_id = nanoid!(8);
-    
-    // Determine filename and mime type
-    let file_name = queue_item.file_name.clone()
-        .unwrap_or_else(|| {
-            file_path.split('/').last()
-                .unwrap_or("file")
-                .to_string()
-        });
 
-    let mime_type = mime_guess::from_path(&file_name)
-        .first()
-        .map(|m| m.to_string());
+    // Determine filename, mime type, and file size from the message itself (avoids get_file for large files)
+    let file_size: u32;
+    let mime_type: Option<String>;
+    let mut final_file_name: Option<String> = queue_item.file_name.clone();
 
     // Forward the message to storage channel by copying the file
     let forwarded_msg = if let Some(doc) = queue_item.message.document() {
+        // Prefer original filename for documents if not provided explicitly
+        if final_file_name.is_none() {
+            if let Some(name) = doc.file_name.clone() { final_file_name = Some(name); }
+        }
+        file_size = doc.file.size;
+        mime_type = doc.mime_type.as_ref().map(|m| m.to_string());
         bot.get_teloxide_bot()
             .send_document(ChatId(storage_channel_id), InputFile::file_id(&doc.file.id))
             .caption(&unique_id)
@@ -168,18 +200,40 @@ async fn forward_file_to_storage_channel(
             .map_err(|e| format!("Failed to forward document: {}", e))?
     } else if let Some(photo) = queue_item.message.photo() {
         let largest_photo = photo.last().ok_or("No photo found")?;
+        // Telegram photos are JPEG; generate a meaningful name if not provided
+        if final_file_name.is_none() {
+            final_file_name = Some(format!("photo_{}.jpg", unique_id));
+        }
+        file_size = largest_photo.file.size;
+        mime_type = Some("image/jpeg".to_string());
         bot.get_teloxide_bot()
             .send_photo(ChatId(storage_channel_id), InputFile::file_id(&largest_photo.file.id))
             .caption(&unique_id)
             .await
             .map_err(|e| format!("Failed to forward photo: {}", e))?
     } else if let Some(video) = queue_item.message.video() {
+        if final_file_name.is_none() {
+            // Most Telegram videos are MP4
+            final_file_name = Some(format!("video_{}.mp4", unique_id));
+        }
+        file_size = video.file.size;
+        mime_type = video.mime_type.as_ref().map(|m| m.to_string()).or(Some("video/mp4".to_string()));
         bot.get_teloxide_bot()
             .send_video(ChatId(storage_channel_id), InputFile::file_id(&video.file.id))
             .caption(&unique_id)
             .await
             .map_err(|e| format!("Failed to forward video: {}", e))?
     } else if let Some(animation) = queue_item.message.animation() {
+        if final_file_name.is_none() {
+            // Animation could be GIF or MP4; attempt to infer
+            let ext = match animation.mime_type.as_ref().map(|m| m.essence_str()) {
+                Some("image/gif") => "gif",
+                _ => "mp4",
+            };
+            final_file_name = Some(format!("animation_{}.{}", unique_id, ext));
+        }
+        file_size = animation.file.size;
+        mime_type = animation.mime_type.as_ref().map(|m| m.to_string()).or(Some("video/mp4".to_string()));
         bot.get_teloxide_bot()
             .send_animation(ChatId(storage_channel_id), InputFile::file_id(&animation.file.id))
             .caption(&unique_id)
@@ -204,6 +258,14 @@ async fn forward_file_to_storage_channel(
 
     info!("File stored in channel with ID: {}", stored_file_id);
 
+    // Capture the message ID for FastTelethon downloads
+    let message_id = forwarded_msg.id.0;
+    info!("Stored message ID: {}", message_id);
+
+    // Finalize filename and mime type
+    let file_name = final_file_name.unwrap_or_else(|| format!("file_{}", unique_id));
+    let mime_type = mime_type.or_else(|| mime_guess::from_path(&file_name).first().map(|m| m.to_string()));
+
     // Save metadata to our mapping storage
     let metadata = FileMetadata {
         unique_id: unique_id.clone(),
@@ -215,6 +277,7 @@ async fn forward_file_to_storage_channel(
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        message_id: Some(message_id),
     };
 
     save_file_metadata(metadata).await
@@ -283,6 +346,10 @@ async fn download_and_store_file_from_url(
 
     info!("File stored in channel with ID: {}", stored_file_id);
 
+    // Capture the message ID for FastTelethon downloads
+    let message_id = uploaded_msg.id.0;
+    info!("Stored message ID: {}", message_id);
+
     // Save metadata
     let metadata = FileMetadata {
         unique_id: unique_id.clone(),
@@ -294,6 +361,7 @@ async fn download_and_store_file_from_url(
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        message_id: Some(message_id),
     };
 
     save_file_metadata(metadata).await
@@ -306,6 +374,7 @@ async fn download_and_store_file_from_url(
 }
 
 
+#[allow(dead_code)]
 async fn generate_final_file_name(queue_item: &FileQueueItem, file_path_or_name: &str) -> String {
     let id = nanoid!(5);
     let name = queue_item.file_name.as_ref().map(|name| name.to_string().replace(' ', "_"));
@@ -326,6 +395,7 @@ async fn generate_final_file_name(queue_item: &FileQueueItem, file_path_or_name:
 /// # Returns
 /// * `Result` containing a tuple of file path and file size
 /// * `String` containing an error message
+#[allow(dead_code)]
 async fn get_file_info(bot: Arc<TeloxideBot>, id: &String) -> Result<(String, u32), String> {
     const MAX_ATTEMPTS: u32 = 3;
 
@@ -359,6 +429,18 @@ async fn get_file_info(bot: Arc<TeloxideBot>, id: &String) -> Result<(String, u3
 // }
 //
 
+fn human_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    match bytes {
+        b if b >= GB => format!("{:.2} GB", b as f64 / GB as f64),
+        b if b >= MB => format!("{:.2} MB", b as f64 / MB as f64),
+        b if b >= KB => format!("{:.2} KB", b as f64 / KB as f64),
+        _ => format!("{} bytes", bytes),
+    }
+}
+
 async fn edit_message_with_file_link(
     bot: Arc<TeloxideBot>,
     queue_item: &FileQueueItem,
@@ -367,18 +449,17 @@ async fn edit_message_with_file_link(
     file_size: u32,
 ) -> Result<(), String> {
     let file_domain = Config::instance().await.file_domain();
-    
-    // Create URL-safe filename and build full URL path
-    let url_safe_filename = file_name.replace(' ', "_");
-    let full_path = format!("{}_{}",  unique_id, url_safe_filename);
-    
+    // Build full URL path using shared util (id + url-safe filename)
+    let full_path = build_url_path(unique_id, file_name);
+    info!("Generated download link: {}{}", file_domain, full_path);
+    let size_str = human_size(file_size as u64);
     let edit_result = bot.get_teloxide_bot().edit_message_text(
         queue_item.message.chat.id,
         queue_item.queue_message.id,
         format!(
-            "✅ <b>File uploaded successfully!</b>\n\n📁 <b>File:</b> {}\n📊 <b>Size:</b> {} bytes\n\n🔗 <b>Download Link:</b>\n<a href=\"{}{}\">{}{}</a>",
+            "✅ <b>File uploaded successfully!</b>\n\n📁 <b>File:</b> {}\n📊 <b>Size:</b> {}\n\n🔗 <b>Download Link:</b>\n<a href=\"{}{}\">{}{}</a>",
             file_name,
-            file_size,
+            size_str,
             file_domain,
             full_path,
             file_domain,

@@ -14,6 +14,8 @@ pub struct FileMetadata {
     pub mime_type: Option<String>,
     pub file_size: u32,
     pub uploaded_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<i32>,  // Telegram message ID for large files
 }
 
 #[derive(Debug, Serialize, Deserialize)]

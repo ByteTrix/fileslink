@@ -12,6 +12,7 @@ pub struct Config {
     server_port: i16,
     file_domain: String,
     telegram_api_url: String,
+    fasttelethon_url: String,
     pipe_path: String,
     enable_files_route: bool,
     storage_channel_id: Result<i64, String>,
@@ -26,6 +27,7 @@ impl Config {
         let server_port = fetch_server_port();
         let file_domain = fetch_file_domain();
         let telegram_api_url = fetch_telegram_api();
+        let fasttelethon_url = fetch_fasttelethon_url();
         let pipe_path = fetch_pipe_path();
         let enable_files_route = fetch_enable_files_route();
         let storage_channel_id = fetch_storage_channel_id();
@@ -35,6 +37,7 @@ impl Config {
             server_port,
             file_domain,
             telegram_api_url,
+            fasttelethon_url,
             pipe_path,
             enable_files_route,
             storage_channel_id,
@@ -65,6 +68,10 @@ impl Config {
 
     pub fn telegram_api_url(&self) -> String {
         self.telegram_api_url.to_owned()
+    }
+
+    pub fn fasttelethon_url(&self) -> String {
+        self.fasttelethon_url.to_owned()
     }
 
     pub fn pipe_path(&self) -> String {
@@ -146,6 +153,20 @@ fn fetch_telegram_api() -> String {
         url
     } else {
         format!("{url}/")
+    }
+}
+
+fn fetch_fasttelethon_url() -> String {
+    let url = fetch_env_variable("FASTTELETHON_URL").unwrap_or_else(|| {
+        info!("FASTTELETHON_URL environment variable is not set. Defaulting to http://localhost:8001");
+        "http://localhost:8001".to_owned()
+    });
+
+    // Remove trailing slash if present for consistency
+    if url.ends_with('/') {
+        url[..url.len()-1].to_owned()
+    } else {
+        url
     }
 }
 

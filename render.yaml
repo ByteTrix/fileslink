@@ -1,0 +1,48 @@
+# Render Blueprint for FilesLink Multi-Service Deployment
+# This replaces docker-compose.yml for Render.com deployment
+# Documentation: https://render.com/docs/blueprint-spec
+
+services:
+  # Main Rust Application
+  - type: web
+    name: fileslink
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free  # Change to 'standard' or higher for production
+    region: singapore  # Choose your region
+    branch: main
+    envVars:
+      - key: RUST_LOG
+        value: info
+      - key: FASTTELETHON_URL
+        value: changeme_to_your-other_render_service_url
+      - key: BOT_TOKEN
+        sync: false  # Set manually in Render dashboard
+      - key: STORAGE_CHANNEL_ID
+        sync: false
+      - key: APP_FILE_DOMAIN
+        sync: false
+      - key: SERVER_PORT
+        value: 8080
+    healthCheckPath: /health
+    
+  # FastTelethon Python Service
+  - type: web
+    name: fasttelethon
+    runtime: docker
+    dockerfilePath: ./python_service/Dockerfile
+    dockerContext: ./python_service
+    plan: free
+    region: singapore
+    branch: main
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false  # Set manually - sensitive
+      - key: TELEGRAM_API_HASH
+        sync: false  # Set manually - sensitive
+      - key: TELEGRAM_PHONE
+        sync: false  # Set manually - sensitive
+      - key: STORAGE_CHANNEL_ID
+        sync: false  # Same as STORAGE_CHANNEL_ID
+      - key: TELETHON_SESSION_BASE64
+        sync: false  # Get this from /session/backup after first authorization

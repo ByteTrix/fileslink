@@ -4,10 +4,13 @@ use shared::chat_config::PermissionsConfig;
 use shared::config::Config;
 use std::sync::Arc;
 use std::time::Duration;
-use teloxide::prelude::Message;
+use teloxide::prelude::{Message, Requester};
+use teloxide::utils::command::{BotCommands, ParseError};
 use tokio::sync::Mutex;
 use crate::process_message::process_message;
-use crate::queue::FileQueueType;
+use crate::queue::{FileQueueType, get_queue_snapshot, clear_queue_all};
+use shared::file_storage::{list_all_files, delete_file_metadata, save_file_metadata};
+use teloxide::types::ChatId;
 
 pub trait Bot {
     fn new(config: Arc<Config>, permissions: Arc<Mutex<PermissionsConfig>>, queue: FileQueueType) -> Result<Self, String> where Self: Sized;
@@ -66,7 +69,7 @@ impl Bot for TeloxideBot {
         let permissions = Arc::clone(&self.permissions);
         let bot = self.teloxide_bot.clone();
 
-        teloxide::repl(bot.clone(), move |msg: Message| {
+    teloxide::repl(bot.clone(), move |msg: Message| {
             debug!("Received message: {:?}", msg);
 
             let bot = Arc::clone(&bot);
@@ -102,6 +105,29 @@ impl Bot for TeloxideBot {
                     msg.clone().chat.id
                 );
 
+                // Try to parse commands first
+                if let Some(text) = msg.text() {
+                    let chat_id = msg.chat.id;
+                    // Allow spaces in /find query
+                    if let Some(rest) = text.strip_prefix("/find ") {
+                        handle_command(bot_clone.clone(), chat_id, file_queue.clone(), Command::Find { query: rest.trim().to_string() }).await;
+                        return Ok(());
+                    }
+                    // Handle /list with optional page number
+                    if text.starts_with("/list") {
+                        let page = text
+                            .split_whitespace()
+                            .nth(1)
+                            .and_then(|s| s.parse::<usize>().ok());
+                        handle_list_command(bot_clone.clone(), chat_id, page).await;
+                        return Ok(());
+                    }
+                    if let Ok(cmd) = Command::parse(text, "") {
+                        handle_command(bot_clone.clone(), chat_id, file_queue.clone(), cmd).await;
+                        return Ok(());
+                    }
+                }
+
                 if let Err(e) = process_message(bot_clone.clone(), msg.clone(), file_queue, tx).await {
                     error!("Failed to process message: {}", e);
                 }
@@ -109,6 +135,127 @@ impl Bot for TeloxideBot {
                 Ok(())
             }
         }).await;
+    }
+}
+
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase", description = "These commands are supported:")]
+enum Command {
+    #[command(description = "show this help message")]
+    Help,
+    #[command(description = "list recent file links. Usage: /list or /list <page>")]
+    List,
+    #[command(description = "show current queue")]
+    ShowQueue,
+    #[command(description = "clear the processing queue")]
+    ClearQueue,
+    #[command(description = "delete a file by id (prefix of the link)")]
+    Delete(String),
+    #[command(description = "edit filename: /edit <id> <new_name.ext>", parse_with = split)]
+    Edit { id: String, new_name: String },
+    #[command(description = "search files by name: /find <query>")]
+    Find { query: String },
+}
+
+// Custom argument parser for `/edit <id> <new_name>`
+fn split(s: String) -> Result<(String, String), ParseError> {
+    let mut parts = s.splitn(2, char::is_whitespace).filter(|p| !p.is_empty());
+    let id = parts.next().ok_or_else(|| ParseError::Custom("missing id".into()))?;
+    let new_name = parts.next().ok_or_else(|| ParseError::Custom("missing new filename".into()))?;
+    Ok((id.to_string(), new_name.to_string()))
+}
+
+async fn handle_list_command(bot: Arc<teloxide::Bot>, chat_id: ChatId, page: Option<usize>) {
+    let mut files = list_all_files().await;
+    if files.is_empty() {
+        let _ = bot.send_message(chat_id, "No files found").await;
+        return;
+    }
+    files.sort_by_key(|m| m.uploaded_at);
+    let per_page: usize = 10;
+    let total = files.len();
+    let total_pages = (total + per_page - 1) / per_page;
+    let p = page.unwrap_or(1).max(1).min(total_pages.max(1));
+
+    let start_from_end = (p - 1) * per_page;
+    let slice: Vec<_> = files.into_iter().rev().skip(start_from_end).take(per_page).collect();
+    let cfg = Config::instance().await;
+    let domain = cfg.file_domain();
+    let mut lines = Vec::new();
+    lines.push(format!("Page {}/{} ({} total)", p, total_pages.max(1), total));
+    for f in slice {
+        let url_name = f.file_name.replace(' ', "_");
+        lines.push(format!("- {} ({} bytes)\n{}{}_{}", f.file_name, f.file_size, domain, f.unique_id, url_name));
+    }
+    if total_pages > 1 {
+        lines.push("\nTip: use /list <page>".to_string());
+    }
+    let _ = bot.send_message(chat_id, lines.join("\n")).await;
+}
+
+async fn handle_command(bot: Arc<teloxide::Bot>, chat_id: ChatId, queue: FileQueueType, cmd: Command) {
+    match cmd {
+        Command::Help => {
+            let _ = bot.send_message(chat_id, Command::descriptions().to_string()).await;
+        }
+        Command::ShowQueue => {
+            let (total, items) = get_queue_snapshot(&queue, 10).await;
+            let mut text = format!("Queue size: {}\n", total);
+            if items.is_empty() { text.push_str("(empty)"); } else { text.push_str(&items.join("\n")); }
+            let _ = bot.send_message(chat_id, text).await;
+        }
+        Command::ClearQueue => {
+            let n = clear_queue_all(&queue).await;
+            let _ = bot.send_message(chat_id, format!("Cleared {} item(s) from queue", n)).await;
+        }
+        Command::List => {
+            handle_list_command(bot.clone(), chat_id, None).await;
+        }
+        Command::Delete(id) => {
+            let _ = delete_file_metadata(&id).await;
+            let _ = bot.send_message(chat_id, format!("Deleted mapping for id: {}", id)).await;
+        }
+        Command::Edit { id, new_name } => {
+            // Load all, update one, and save via save_file_metadata
+            let files = list_all_files().await;
+            if let Some(mut meta) = files.into_iter().find(|m| m.unique_id == id) {
+                meta.file_name = new_name.clone();
+                let _ = save_file_metadata(meta).await;
+                let _ = bot.send_message(chat_id, format!("Updated filename for {}", id)).await;
+            } else {
+                let _ = bot.send_message(chat_id, format!("File id not found: {}", id)).await;
+            }
+        }
+        Command::Find { query } => {
+            let q = query.to_lowercase();
+            if q.is_empty() {
+                let _ = bot.send_message(chat_id, "Usage: /find <query>").await;
+                return;
+            }
+            let mut files = list_all_files().await;
+            files.sort_by_key(|m| m.uploaded_at);
+            let matches: Vec<_> = files
+                .into_iter()
+                .filter(|m| m.file_name.to_lowercase().contains(&q))
+                .rev()
+                .take(10)
+                .collect();
+            if matches.is_empty() {
+                let _ = bot.send_message(chat_id, "No matches found").await;
+                return;
+            }
+            let cfg = Config::instance().await;
+            let domain = cfg.file_domain();
+            let mut lines = Vec::new();
+            for f in matches {
+                let url_name = f.file_name.replace(' ', "_");
+                lines.push(format!("- {} ({} bytes)\n{}{}_{}", f.file_name, f.file_size, domain, f.unique_id, url_name));
+            }
+            if lines.len() == 10 {
+                lines.push("(showing first 10 results)".to_string());
+            }
+            let _ = bot.send_message(chat_id, lines.join("\n")).await;
+        }
     }
 }
 

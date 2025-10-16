@@ -5,3 +5,5 @@
 /.idea
 /telegram-bot-api-data
 /nginx
+.vscode/tasks.json
+python_service/sessions/fasttelethon_session.session
