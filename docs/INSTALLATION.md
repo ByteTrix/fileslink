@@ -11,13 +11,10 @@ Copy `.env.example` to `.env` and fill in:
 ```text
 BOT_TOKEN=your_bot_token
 SERVER_PORT=8080
-APP_FILE_DOMAIN=http://localhost:8080/files
-TELEGRAM_API_URL=http://localhost:8088
+APP_FILE_DOMAIN=http://localhost:8080/files #change to your domain / hosting domain
+TELEGRAM_API_URL=https://api.telegram.org
 FILESLINK_PIPE_PATH=/tmp/fileslink.pipe
 STORAGE_CHANNEL_ID=-1001234567890
-TELEGRAM_API_ID=your_api_id
-TELEGRAM_API_HASH=your_api_hash
-TELEGRAM_LOCAL=true
 ```
 
 See [docs/TELEGRAM_STORAGE_SETUP.md](TELEGRAM_STORAGE_SETUP.md) for channel setup and how to get the channel ID using @userinfobot.
