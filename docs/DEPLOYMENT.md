@@ -19,10 +19,11 @@ Render offers a generous free tier, but instances sleep after 15 minutes of inac
 
 ### Why Render + Keep-Alive?
 
-- ✅ Completely free
+- ✅ Completely free (without persistent disk)
 - ✅ No sleep with keep-alive solution
 - ✅ Automatic HTTPS
 - ✅ Git-based deployment
+- ⚠️ Ephemeral storage (maybe settings,links lost on restart)
 
 ### Deploy to Render
 

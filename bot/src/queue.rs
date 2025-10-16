@@ -367,6 +367,11 @@ async fn edit_message_with_file_link(
     file_size: u32,
 ) -> Result<(), String> {
     let file_domain = Config::instance().await.file_domain();
+    
+    // Create URL-safe filename and build full URL path
+    let url_safe_filename = file_name.replace(' ', "_");
+    let full_path = format!("{}_{}",  unique_id, url_safe_filename);
+    
     let edit_result = bot.get_teloxide_bot().edit_message_text(
         queue_item.message.chat.id,
         queue_item.queue_message.id,
@@ -375,9 +380,9 @@ async fn edit_message_with_file_link(
             file_name,
             file_size,
             file_domain,
-            unique_id,
+            full_path,
             file_domain,
-            unique_id
+            full_path
         ),
     )
         .parse_mode(ParseMode::Html)

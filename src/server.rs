@@ -74,13 +74,24 @@ async fn files_id(
     State(state): State<AppState>,
     extract::Path(id): extract::Path<String>
 ) -> Result<Response<Body>, Infallible> {
-    debug!("Requested file with unique ID: {}", id);
+    debug!("Requested file with path: {}", id);
+    
+    // Extract unique ID from path (format: abc123_filename.ext)
+    // Split by first underscore to get the ID
+    let unique_id = if let Some(underscore_pos) = id.find('_') {
+        &id[..underscore_pos]
+    } else {
+        // Fallback to full string if no underscore (old format compatibility)
+        &id
+    };
+    
+    debug!("Extracted unique ID: {}", unique_id);
 
     // Get file metadata from storage
-    let metadata = match get_file_metadata(&id).await {
+    let metadata = match get_file_metadata(unique_id).await {
         Some(m) => m,
         None => {
-            warn!("File not found with ID: {}", id);
+            warn!("File not found with ID: {}", unique_id);
             let body = not_found_handler().await;
             return Ok((
                 StatusCode::NOT_FOUND,
@@ -123,7 +134,8 @@ async fn files_id(
     let content_type = metadata.mime_type
         .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    let content_disposition = format!("attachment; filename=\"{}\"", metadata.file_name);
+    // Use original filename from metadata for download
+    let content_disposition = format!("inline; filename=\"{}\"", metadata.file_name);
 
     info!("Serving file: {} ({} bytes) with content type: {}", 
           metadata.file_name, file_bytes.len(), content_type);
