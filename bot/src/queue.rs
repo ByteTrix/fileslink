@@ -451,19 +451,19 @@ async fn edit_message_with_file_link(
     let file_domain = Config::instance().await.file_domain();
     // Build full URL path using shared util (id + url-safe filename)
     let full_path = build_url_path(unique_id, file_name);
-    info!("Generated download link: {}{}", file_domain, full_path);
+    // Add auto-close parameter for better UX (closes tab after download starts)
+    let full_url_with_close = format!("{}{}?close=1", file_domain, full_path);
+    info!("Generated download link: {}", full_url_with_close);
     let size_str = human_size(file_size as u64);
     let edit_result = bot.get_teloxide_bot().edit_message_text(
         queue_item.message.chat.id,
         queue_item.queue_message.id,
         format!(
-            "✅ <b>File uploaded successfully!</b>\n\n📁 <b>File:</b> {}\n📊 <b>Size:</b> {}\n\n🔗 <b>Download Link:</b>\n<a href=\"{}{}\">{}{}</a>",
+            "✅ <b>File uploaded successfully!</b>\n\n📁 <b>File:</b> {}\n📊 <b>Size:</b> {}\n\n🔗 <b>Download Link:</b>\n<a href=\"{}\">{}</a>",
             file_name,
             size_str,
-            file_domain,
-            full_path,
-            file_domain,
-            full_path
+            full_url_with_close,
+            full_url_with_close
         ),
     )
         .parse_mode(ParseMode::Html)

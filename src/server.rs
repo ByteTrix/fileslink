@@ -13,6 +13,7 @@ use http::{header::CONTENT_TYPE, StatusCode};
 use log::{debug, error, info, warn};
 use teloxide::net::Download;
 use teloxide::prelude::Requester;
+use base64::Engine;
 
 use shared::file_storage::{get_file_metadata, list_all_files, FileMetadata};
 use crate::config::Config;
@@ -219,6 +220,9 @@ async fn files_id(
         }
     }
 
+    // Check if auto-close is requested via ?close=1
+    let auto_close = params.get("close").is_some();
+    
     // Determine content type, allow force download via ?dl=1
     let force_download = params.get("dl").is_some();
     let content_type = if force_download {
@@ -233,6 +237,65 @@ async fn files_id(
 
     info!("Serving file: {} ({} bytes) with content type: {}", 
           metadata.file_name, file_bytes.len(), content_type);
+
+    // If auto-close requested, return HTML with auto-download and close script
+    if auto_close {
+        let html = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Downloading {}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
+        .loader {{ border: 5px solid #f3f3f3; border-top: 5px solid #3498db; 
+                   border-radius: 50%; width: 50px; height: 50px; 
+                   animation: spin 1s linear infinite; margin: 20px auto; }}
+        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+    </style>
+</head>
+<body>
+    <h2>Downloading {}</h2>
+    <div class="loader"></div>
+    <p>Your download will begin shortly...</p>
+    <p><small>This window will close automatically.</small></p>
+    <script>
+        // Create blob from base64 data and trigger download
+        const base64Data = "{}";
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {{
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }}
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {{ type: '{}' }});
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "{}";
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+        // Close window after 2 seconds
+        setTimeout(function() {{
+            window.close();
+        }}, 2000);
+    </script>
+</body>
+</html>"#,
+            metadata.file_name,
+            metadata.file_name,
+            base64::engine::general_purpose::STANDARD.encode(&file_bytes),
+            content_type,
+            metadata.file_name
+        );
+        
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(html.into())
+            .unwrap());
+    }
 
     Ok(Response::builder()
         .status(StatusCode::OK)

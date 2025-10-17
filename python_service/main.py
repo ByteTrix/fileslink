@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
 API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 PHONE = os.getenv("TELEGRAM_PHONE", "")
-SESSION_NAME = os.getenv("SESSION_NAME", "fasttelethon_session")
+SESSION_NAME = os.getenv("SESSION_NAME", "/app/sessions/fasttelethon_session")
 CHANNEL_ID = os.getenv("STORAGE_CHANNEL_ID", "")  # Channel to store files
 
 # Global client and authorization state
@@ -381,8 +381,11 @@ async def backup_session():
     import base64
     session_file = f"{SESSION_NAME}.session"
     
+    logger.info(f"Looking for session file at: {session_file}")
+    
     if not os.path.exists(session_file):
-        raise HTTPException(status_code=404, detail="Session file not found")
+        logger.error(f"Session file not found at {session_file}")
+        raise HTTPException(status_code=404, detail=f"Session file not found at {session_file}")
     
     try:
         with open(session_file, 'rb') as f:

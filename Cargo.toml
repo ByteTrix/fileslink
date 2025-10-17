@@ -22,6 +22,7 @@ mime_guess = "2.0.4"
 structopt = "0.3.26"
 teloxide = { version = "0.12", features = ["full"] }
 reqwest = { version = "0.12", features = ["blocking"] }
+base64 = "0.22"
 cli = { path = "cli" }
 shared = { path = "shared" }
 bot = { path = "bot" }
